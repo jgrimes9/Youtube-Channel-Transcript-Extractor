@@ -15,31 +15,27 @@
     <div class="container mt-5">
         <h1 class="mb-3">YouTube Transcript Extractor</h1>
         <p class="mb-4">
-            Enter the YouTube Channel ID (e.g., <code>UCXXXXXXXXXXXXXXX</code>), your desired download folder name, and your YouTube API key below.
+            This website allows you to download all available transcripts from a specific Youtube channel, along with metadata for each video, such as title, viewcount, duration, and more. This enables analysis on a channels entire content all at once. 
+            Enter the YouTube Channel ID (e.g., <code>UCXXXXXXXXXXXXXXX</code>), your YouTube Data API v3 API key, and your desired folder name for the downloadable results.
         </p>
-        <!-- Brief description on how to get the Channel ID -->
-        <div class="alert alert-info" role="alert">
-            <strong>How to get the Channel ID:</strong>
-            <br>
-            If your channel URL does not display the Channel ID, right-click on the channel's page and choose "View Page Source" (or press Ctrl+U).
-            Then, use Ctrl+F to search for <code>"channelId"</code> or <code>"data-channel-external-id"</code>.
-            The Channel ID will typically start with <code>UC</code>.
-        </div>
         
         <form id="channelForm" action="/process" method="post">
             <div class="form-group">
                 <label for="channelId">YouTube Channel ID:</label>
+                <!-- Brief description on how to get the Channel ID -->
+                <div class="alert alert-info" role="alert">
+                    <strong>How to get the Channel ID:</strong>
+                    <br>
+                    Right-click on the channel's page and choose "View Page Source" (or press Ctrl+U).
+                    Then, use Ctrl+F to search for <code>"channelId"</code> or <code>"data-channel-external-id"</code>.
+                    The Channel ID will typically start with <code>UC</code>.
+                </div>
                 <input type="text" class="form-control" id="channelId" name="channelId" placeholder="UCXXXXXXXXXXXXXXX" required>
             </div>
             <div class="form-group">
-                <label for="folderName">Download Folder Name:</label>
-                <input type="text" class="form-control" id="folderName" name="folderName" placeholder="Results" required>
-            </div>
-            <div class="form-group">
                 <label for="apiKey">Your YouTube Data API v3 API Key:</label>
-                <input type="text" class="form-control" id="apiKey" name="apiKey" placeholder="Enter your API key" required>
                 <!-- Explanation on how to get the API key -->
-                <small class="form-text text-muted">
+                <div class="alert alert-info" role="alert">
                     <strong>How to get your YouTube Data API v3 API Key:</strong>
                     <br>
                     1. Go to the <a href="https://console.developers.google.com/" target="_blank">Google Developers Console</a>.
@@ -54,8 +50,13 @@
                     <br>
                     6. Select "API key" from the dropdown menu. Your API key will be generated.
                     <br>
-                    7. Copy the API key and paste it in the box above.
-                </small>
+                    7. Copy the API key and paste it in the box below.
+                </div>
+                <input type="text" class="form-control" id="apiKey" name="apiKey" placeholder="Enter your API key" required>
+            </div>
+            <div class="form-group">
+                <label for="folderName">Download Folder Name:</label>
+                <input type="text" class="form-control" id="folderName" name="folderName" placeholder="Results" required>
             </div>
             <button type="submit" class="btn btn-primary">Submit</button>
         </form>
