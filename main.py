@@ -311,70 +311,104 @@ def process_videos(client, channel_id):
         
         create_files(transcripts_list, no_transcript_list)
 
+def validate_credentials(api_key, channel_id):
+    """Validate API key and channel ID before starting the process."""
+    errors = []
+    client = None
+
+    if TEST_MODE:
+        return None, "Dummy Channel", 100, None
+
+    # First validate channel ID format
+    if not channel_id.startswith('UC') or len(channel_id) != 24:
+        errors.append("Invalid Channel ID. Must start with 'UC' and be 24 characters long.")
+
+    # Always try to validate API key even if channel ID format is invalid
+    try:
+        client = build('youtube', 'v3', developerKey=api_key)
+        # Test API key with a simple request
+        test_response = client.search().list(
+            part='snippet',
+            q='test',
+            maxResults=1
+        ).execute()
+    except Exception as e:
+        logging.error("Invalid API key: %s", e)
+        errors.append("Invalid API key.")
+    
+    # If we have errors already, return them
+    if errors:
+        return None, None, None, "\n".join(errors)  # Changed from " ".join to "\n".join
+
+    # Only try to validate channel if API key is valid
+    try:
+        # Validate channel ID and get channel info
+        channel_response = client.channels().list(
+            part='snippet,statistics', 
+            id=channel_id
+        ).execute()
+        
+        if not channel_response.get('items'):
+            errors.append("Channel ID not found. Please verify the channel ID.")
+            return None, None, None, " ".join(errors)
+        
+        channel_name = channel_response['items'][0]['snippet']['title']
+        total_videos = int(channel_response['items'][0]['statistics']['videoCount'])
+        return client, channel_name, total_videos, None
+        
+    except Exception as e:
+        logging.error("Error validating channel ID: %s", e)
+        errors.append("Error accessing channel. Please verify the channel ID.")
+        return None, None, None, " ".join(errors)
+
+@app.route('/validate', methods=['POST'])
+def validate():
+    """Validate credentials before starting the process."""
+    channel_id = request.form['channelId']
+    user_api_key = request.form['apiKey']
+    
+    logging.info("Validating credentials for channel ID: %s", channel_id)
+    
+    client, validated_channel_name, validated_total_videos, error = validate_credentials(user_api_key, channel_id)
+    
+    if error:
+        return jsonify({"error": error}), 400
+        
+    return jsonify({
+        "channel_name": validated_channel_name,
+        "total_videos": validated_total_videos,
+        "api_key": user_api_key  # Pass back for process route
+    })
+
 @app.route('/process', methods=['POST'])
 def process_channel():
-    global progress, download_folder_name, channel_name, total_videos, transcripts_count, no_transcripts_count, stop_process
+    global progress, download_folder_name, channel_name, total_videos, transcripts_count
+    global no_transcripts_count, stop_process
+
     # Reset all global variables
     progress = 0
     transcripts_count = 0
     no_transcripts_count = 0
     stop_process = False
-    channel_name = ""
-    total_videos = 0
     
     channel_id = request.form['channelId']
     download_folder_name = request.form.get('folderName', 'Results')
     user_api_key = request.form['apiKey']
-    logging.info("Channel ID received: %s", channel_id)
-    logging.info("Download folder name set to: %s", download_folder_name)
-    logging.info("User API key received.")
-    progress = 0  # Reset progress before starting.
-    errors = []
     
+    # Validation already done, just get the client
     if TEST_MODE:
+        client = None
         channel_name = "Dummy Channel"
-        total_videos = 100  # Updated to match new test video count
-        client = None  # Dummy mode; client not used.
+        total_videos = 100
     else:
-        # Try to build the client and test the API key.
-        try:
-            client = build('youtube', 'v3', developerKey=user_api_key)
-            test_response = client.search().list(
-                part='snippet',
-                q='test',
-                maxResults=1
-            ).execute()
-        except Exception as e:
-            logging.error("Invalid API key: %s", e)
-            errors.append("Invalid API key.")
-        
-        # Try to validate the channel ID.
-        try:
-            # Only attempt channel lookup if client is built
-            channel_response = client.channels().list(
-                part='snippet', 
-                id=channel_id
-            ).execute() if client else {}
-            if not channel_response.get('items'):
-                errors.append("Invalid channel ID.")
-            else:
-                channel_name = channel_response['items'][0]['snippet']['title']
-                # Get initial video count
-                playlist_response = client.channels().list(
-                    part='statistics',
-                    id=channel_id
-                ).execute()
-                if playlist_response.get('items'):
-                    total_videos = int(playlist_response['items'][0]['statistics']['videoCount'])
-        except Exception as e:
-            logging.error("Error validating channel ID: %s", e)
-            errors.append("Invalid channel ID.")
-    
-    if errors:
-        return jsonify({"error": " ".join(errors)}), 400
-    
+        client = build('youtube', 'v3', developerKey=user_api_key)
+        channel_name = request.form['channel_name']
+        total_videos = int(request.form['total_videos'])
+
+    # Start processing thread
     thread = threading.Thread(target=process_videos, args=(client, channel_id))
     thread.start()
+    
     return jsonify({
         "message": "Channel processing started!",
         "channel_name": channel_name,
