@@ -31,9 +31,12 @@ no_transcript_list = []
 download_folder_name = "Results"  # default folder name
 
 channel_name = ""
+total_videos = 0  # Add this line
 transcripts_count = 0
 no_transcripts_count = 0
 process_time = 0.0
+stop_process = False  # Add this new global variable
+start_time = None  # Add this line
 
 # In-memory caches for optimization.
 video_cache = {}           # key: (channel_id, api_key) -> videos list
@@ -61,34 +64,21 @@ def parse_iso8601_duration(iso_duration):
 
 def get_videos(client, channel_id):
     """Fetch all videos from a channel using pagination (or return dummy data in test mode)."""
-    # Use caching keyed on (channel_id, api_key)
     cache_key = (channel_id, client._developerKey) if client else (channel_id, "dummy")
     if cache_key in video_cache:
         logging.info("Using cached videos for channel: %s", channel_id)
         return video_cache[cache_key]
     
     if TEST_MODE:
-        dummy_videos = [
-            {
-                'video_id': 'dummy1',
-                'title': 'Dummy Video 1',
-                'published_at': '2022-01-01T00:00:00Z',
-                'link': 'https://www.youtube.com/watch?v=dummy1'
-            },
-            {
-                'video_id': 'dummy2',
-                'title': 'Dummy Video 2',
-                'published_at': '2022-01-02T00:00:00Z',
-                'link': 'https://www.youtube.com/watch?v=dummy2'
-            },
-            {
-                'video_id': 'dummy3',
-                'title': 'Dummy Video 3',
-                'published_at': '2022-01-03T00:00:00Z',
-                'link': 'https://www.youtube.com/watch?v=dummy3'
-            }
-        ]
-        logging.info("Returning dummy videos for channel: %s", channel_id)
+        dummy_videos = []
+        for i in range(1, 101):  # Generate 100 dummy videos
+            dummy_videos.append({
+                'video_id': f'dummy{i}',
+                'title': f'Dummy Video {i}',
+                'published_at': f'2022-{((i-1)//30 + 1):02d}-{((i-1)%30 + 1):02d}T00:00:00Z',
+                'link': f'https://www.youtube.com/watch?v=dummy{i}'
+            })
+        logging.info("Returning 100 dummy videos for channel: %s", channel_id)
         video_cache[cache_key] = dummy_videos
         return dummy_videos
     else:
@@ -165,13 +155,12 @@ def get_transcript(video_id, client):
     """Retrieve transcript for a video; return dummy transcript in test mode if applicable."""
     cache_key = (video_id, client._developerKey) if client else (video_id, "dummy")
     if TEST_MODE:
-        dummy_transcripts = {
-            'dummy1': "This is a dummy transcript for video 1.",
-            'dummy2': "This is a dummy transcript for video 2.",
-            'dummy3': "This is a dummy transcript for video 3."
-        }
+        video_num = int(video_id.replace('dummy', ''))
+        dummy_transcript = f"This is a dummy transcript for video {video_num}. "
+        dummy_transcript += "It contains some sample text that varies by video number. "
+        dummy_transcript += f"The video discusses topic {video_num % 5} in detail."
         logging.info("Returning dummy transcript for video: %s", video_id)
-        transcript_cache[cache_key] = dummy_transcripts.get(video_id, "No transcript available.")
+        transcript_cache[cache_key] = dummy_transcript
         return transcript_cache[cache_key]
     else:
         if cache_key in transcript_cache:
@@ -234,13 +223,33 @@ def create_zip_archive(folder_name):
     return zip_buffer
 
 def process_videos(client, channel_id):
-    """Process videos: fetch list, merge metadata, get transcripts concurrently, update progress, and record summary info."""
-    global progress, transcripts_list, no_transcript_list, channel_name, transcripts_count, no_transcripts_count, process_time
-    logging.info("Processing channel ID: %s", channel_id)
+    global progress, transcripts_list, no_transcript_list, channel_name, transcripts_count
+    global no_transcripts_count, process_time, stop_process, start_time
+    
+    transcripts_list = []
+    no_transcript_list = []
     start_time = time.time()
+    process_time = 0.0  # Initialize to 0
+    
+    logging.info("Processing channel ID: %s", channel_id)
     
     if TEST_MODE:
         channel_name = "Dummy Channel"
+        total_steps = 100  # Increased to 100 videos
+        for step in range(total_steps):
+            if stop_process:
+                progress = -1
+                process_time = round(time.time() - start_time, 2)
+                return
+            time.sleep(0.1)  # Reduced sleep time to make test mode faster but still visible
+            if stop_process:  # Check again after sleep
+                progress = -1
+                process_time = round(time.time() - start_time, 2)
+                return
+            progress = int(((step + 1) / total_steps) * 100)
+            transcripts_count = step + 1
+            process_time = round(time.time() - start_time, 2)
+            logging.info("Test mode progress: %d%%, Time: %.2fs", progress, process_time)
     else:
         try:
             channel_response = client.channels().list(part='snippet', id=channel_id).execute()
@@ -252,51 +261,67 @@ def process_videos(client, channel_id):
             logging.error("Error fetching channel details for %s: %s", channel_id, e)
             channel_name = "Unknown Channel"
     
-    videos = get_videos(client, channel_id)
-    if not videos:
-        logging.info("No videos found for channel %s", channel_id)
-        progress = 100
-        return
+        videos = get_videos(client, channel_id)
+        if not videos:
+            logging.info("No videos found for channel %s", channel_id)
+            progress = 100
+            return
 
-    video_ids = [video['video_id'] for video in videos]
-    details = get_video_details(client, video_ids)
-    for video in videos:
-        if video['video_id'] in details:
-            video.update(details[video['video_id']])
-    
-    transcripts_list = []
-    no_transcript_list = []
-    total_videos = len(videos)
-    logging.info("Total videos to process: %d", total_videos)
+        video_ids = [video['video_id'] for video in videos]
+        details = get_video_details(client, video_ids)
+        for video in videos:
+            if video['video_id'] in details:
+                video.update(details[video['video_id']])
+        
+        transcripts_list = []
+        no_transcript_list = []
+        total_videos = len(videos)
+        logging.info("Total videos to process: %d", total_videos)
 
-    def process_video(video):
-        transcript = get_transcript(video['video_id'], client)
-        return video, transcript
+        def process_video(video):
+            transcript = get_transcript(video['video_id'], client)
+            return video, transcript
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(process_video, video): video for video in videos}
-        completed = 0
-        for future in as_completed(futures):
-            video, transcript = future.result()
-            if transcript:
-                video['transcript'] = transcript
-                transcripts_list.append(video)
-            else:
-                no_transcript_list.append(video)
-            completed += 1
-            progress = int((completed / total_videos) * 100)
-            logging.info("Processed video %d/%d, progress: %d%%", completed, total_videos, progress)
-    
-    transcripts_count = len(transcripts_list)
-    no_transcripts_count = len(no_transcript_list)
-    process_time = time.time() - start_time
-    logging.info("Processing complete: %d transcripts, %d without transcripts, time taken: %.2f seconds", transcripts_count, no_transcripts_count, process_time)
-    
-    create_files(transcripts_list, no_transcript_list)
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(process_video, video): video for video in videos}
+            completed = 0
+            for future in as_completed(futures):
+                if stop_process:
+                    executor.shutdown(wait=False, cancel_futures=True)  # Cancel pending futures
+                    progress = -1
+                    process_time = round(time.time() - start_time, 2)  # Round to 2 decimal places
+                    return
+                video, transcript = future.result()
+                if transcript:
+                    video['transcript'] = transcript
+                    transcripts_list.append(video)
+                    transcripts_count = len(transcripts_list)
+                else:
+                    no_transcript_list.append(video)
+                    no_transcripts_count = len(no_transcript_list)
+                completed += 1
+                progress = round((completed / total_videos) * 100)  # Round to whole number
+                process_time = round(time.time() - start_time, 2)  # Update time with 2 decimal precision
+                logging.info("Processed video %d/%d, progress: %d%%, time: %.2fs", 
+                           completed, total_videos, progress, process_time)
+
+        process_time = round(time.time() - start_time, 2)  # Ensure final time is rounded consistently
+        logging.info("Processing complete: %d transcripts, %d without transcripts, time taken: %.2f seconds", 
+                    transcripts_count, no_transcripts_count, process_time)
+        
+        create_files(transcripts_list, no_transcript_list)
 
 @app.route('/process', methods=['POST'])
 def process_channel():
-    global progress, download_folder_name
+    global progress, download_folder_name, channel_name, total_videos, transcripts_count, no_transcripts_count, stop_process
+    # Reset all global variables
+    progress = 0
+    transcripts_count = 0
+    no_transcripts_count = 0
+    stop_process = False
+    channel_name = ""
+    total_videos = 0
+    
     channel_id = request.form['channelId']
     download_folder_name = request.form.get('folderName', 'Results')
     user_api_key = request.form['apiKey']
@@ -307,6 +332,8 @@ def process_channel():
     errors = []
     
     if TEST_MODE:
+        channel_name = "Dummy Channel"
+        total_videos = 100  # Updated to match new test video count
         client = None  # Dummy mode; client not used.
     else:
         # Try to build the client and test the API key.
@@ -330,6 +357,15 @@ def process_channel():
             ).execute() if client else {}
             if not channel_response.get('items'):
                 errors.append("Invalid channel ID.")
+            else:
+                channel_name = channel_response['items'][0]['snippet']['title']
+                # Get initial video count
+                playlist_response = client.channels().list(
+                    part='statistics',
+                    id=channel_id
+                ).execute()
+                if playlist_response.get('items'):
+                    total_videos = int(playlist_response['items'][0]['statistics']['videoCount'])
         except Exception as e:
             logging.error("Error validating channel ID: %s", e)
             errors.append("Invalid channel ID.")
@@ -339,17 +375,40 @@ def process_channel():
     
     thread = threading.Thread(target=process_videos, args=(client, channel_id))
     thread.start()
-    return jsonify({"message": "Channel processing started!"})
+    return jsonify({
+        "message": "Channel processing started!",
+        "channel_name": channel_name,
+        "total_videos": total_videos
+    })
 
 @app.route('/progress')
 def get_progress():
-    result = {"progress": progress}
-    if progress == 100:
+    global stop_process, process_time, start_time
+    
+    # Update process time if process is running
+    if start_time is not None and progress < 100 and progress != -1:
+        process_time = round(time.time() - start_time, 2)
+
+    result = {
+        "progress": progress,
+        "transcripts_count": transcripts_count,
+        "no_transcripts_count": no_transcripts_count,
+        "process_time": process_time,
+        "channel_name": channel_name,
+        "total_videos": total_videos
+    }
+    
+    if progress == 100 or progress == -1:
+        stop_process = False
         result["channel_name"] = channel_name
-        result["transcripts_count"] = transcripts_count
-        result["no_transcripts_count"] = no_transcripts_count
-        result["process_time"] = process_time
+        
     return jsonify(result)
+
+@app.route('/stop_process', methods=['POST'])
+def stop_process_route():
+    global stop_process
+    stop_process = True
+    return jsonify({"message": "Process stop requested"})
 
 @app.route('/download_all')
 def download_all():
