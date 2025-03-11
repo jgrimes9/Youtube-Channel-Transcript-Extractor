@@ -114,7 +114,7 @@
         </form>
 
         <!-- Error Message Container (hidden by default) -->
-        <div id="errorContainer" class="alert alert-danger mt-4" style="display: none;"></div>
+        <div id="errorContainer" class="alert alert-danger mt-4" style="display: none; white-space: pre-line;"></div>
 
         <!-- Spinner (hidden by default) -->
         <div id="spinnerContainer" class="text-center mt-4" style="display: none;">
@@ -202,56 +202,75 @@
         }
 
         // Update form submission handler
-        document.getElementById("channelForm").addEventListener("submit", function(e) {
+        document.getElementById("channelForm").addEventListener("submit", async function(e) {
             e.preventDefault();
-            resetUI(); // Reset UI before starting new process
             
+            // Hide any existing error messages and results
             document.getElementById("errorContainer").style.display = "none";
-            document.getElementById("spinnerContainer").style.display = "block";
-            document.getElementById("progressContainer").style.display = "block";
-            document.getElementById("stopButton").style.display = "block";
-
-            // Add smooth scrolling to progress section
-            document.getElementById("progressContainer").scrollIntoView({ 
-                behavior: 'smooth',
-                block: 'start'
-            });
-
+            document.getElementById("progressContainer").style.display = "none";
+            document.getElementById("spinnerContainer").style.display = "none";
+            document.getElementById("summaryContainer").style.display = "none";
+            document.getElementById("downloadContainer").style.display = "none";
+            
+            resetUI();
+            
             var formData = new FormData(this);
-            fetch('/process', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => {
-                        throw new Error(err.error || 'Server error occurred');
-                    });
+            
+            try {
+                // First, validate credentials
+                const validateResponse = await fetch('/validate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const responseData = await validateResponse.json();
+                
+                if (!validateResponse.ok) {
+                    throw new Error(responseData.error || 'Validation failed');
                 }
-                return response.json();
-            })
-            .then(data => {
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                // Update channel info immediately after successful submission
+                
+                // Now show processing UI
+                document.getElementById("spinnerContainer").style.display = "block";
+                document.getElementById("progressContainer").style.display = "block";
+                document.getElementById("stopButton").style.display = "block";
+                
+                // Add validated data to form
+                formData.append('channel_name', responseData.channel_name);
+                formData.append('total_videos', responseData.total_videos);
+                
+                // Add smooth scrolling to progress section
+                document.getElementById("progressContainer").scrollIntoView({ 
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+                
+                // Update channel info immediately
                 document.getElementById("processingChannelName").innerText = 
-                    `Processing channel: ${data.channel_name}`;
+                    `Processing channel: ${responseData.channel_name}`;
                 document.getElementById("videoCountInfo").innerText = 
-                    `Total videos to process: ${data.total_videos}`;
-                console.log(data);
+                    `Total videos to process: ${responseData.total_videos}`;
+                
+                // Start processing
+                const processResponse = await fetch('/process', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!processResponse.ok) {
+                    const errorData = await processResponse.json();
+                    throw new Error(errorData.error || 'Processing failed');
+                }
+                
                 checkProgress();
-            })
-            .catch(error => {
-                // Display error message and hide spinner and progress bar
+                
+            } catch (error) {
                 const errorContainer = document.getElementById("errorContainer");
                 errorContainer.innerText = error.message || "An unexpected error occurred";
                 errorContainer.style.display = "block";
                 document.getElementById("spinnerContainer").style.display = "none";
                 document.getElementById("progressContainer").style.display = "none";
-                // Scroll to the error message
                 errorContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            });
+            }
         });
 
         // Poll the /progress endpoint every second.
@@ -372,4 +391,3 @@
     </script>
 </body>
 </html>
-
