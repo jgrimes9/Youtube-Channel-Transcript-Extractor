@@ -23,6 +23,34 @@
       html {
           scroll-behavior: smooth;
       }
+      .progress-details {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 0.5rem;
+          font-size: 0.9rem;
+          color: #666;
+      }
+      .progress-bar {
+          transition: width 0.5s ease-in-out;
+      }
+      .hidden {
+          display: none;
+      }
+      .button-group {
+          margin: 20px 0;
+      }
+      .stop-button {
+          background-color: #dc3545;
+          color: white;
+          padding: 10px 20px;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          margin-left: 10px;
+      }
+      .stop-button:hover {
+          background-color: #c82333;
+      }
     </style>
 </head>
 <body>
@@ -98,10 +126,38 @@
 
         <!-- Progress Bar Container (hidden by default) -->
         <div id="progressContainer" class="mt-4" style="display: none;">
-            <div class="progress" style="height: 25px;">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title" id="processingChannelName">Processing channel...</h5>
+                    <p class="card-text" id="videoCountInfo">Preparing to process videos...</p>
+                </div>
+            </div>
+            <div class="progress mb-2" style="height: 25px;">
                 <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;"></div>
             </div>
-            <p id="progressText" class="mt-2 text-center">0% complete</p>
+            <div class="text-center mb-3">
+                <span id="progressPercent">0%</span>
+            </div>
+            <div class="progress-details mb-3">
+                <span id="progressText">Processing videos...</span>
+                <span id="timeRemaining">Estimating time...</span>
+            </div>
+            <div class="text-center mb-3">
+                <button id="stopButton" class="btn btn-danger">Stop Process</button>
+            </div>
+            <div id="stats" class="mt-3">
+                <p>Videos with transcripts: <span id="transcriptsCount">0</span></p>
+                <p>Videos without transcripts: <span id="noTranscriptsCount">0</span></p>
+                <p>Processing time: <span id="processTime">0</span> seconds</p>
+            </div>
+        </div>
+
+        <!-- Stopped Process Message (hidden by default) -->
+        <div id="stoppedContainer" class="mt-4 text-center" style="display: none;">
+            <div class="alert alert-warning">
+                <h4 class="alert-heading">Process Stopped</h4>
+                <p id="stoppedStats" class="mb-0"></p>
+            </div>
         </div>
         
         <!-- Summary Container (hidden by default) -->
@@ -124,14 +180,37 @@
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // When the form is submitted:
+        // Add this new function to reset UI elements
+        function resetUI() {
+            // Reset progress and counters
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressPercent').innerText = '0%';
+            document.getElementById('transcriptsCount').innerText = '0';
+            document.getElementById('noTranscriptsCount').innerText = '0';
+            document.getElementById('processTime').innerText = '0';
+            document.getElementById('progressText').innerText = 'Processing videos...';
+            document.getElementById('timeRemaining').innerText = 'Estimating time...';
+            
+            // Hide containers that might have been visible from previous runs
+            document.getElementById('stoppedContainer').style.display = 'none';
+            document.getElementById('summaryContainer').style.display = 'none';
+            document.getElementById('downloadContainer').style.display = 'none';
+            
+            // Reset start time
+            startTime = null;
+            lastProgress = 0;
+        }
+
+        // Update form submission handler
         document.getElementById("channelForm").addEventListener("submit", function(e) {
             e.preventDefault();
-            // Hide previous error message, if any.
+            resetUI(); // Reset UI before starting new process
+            
             document.getElementById("errorContainer").style.display = "none";
-            // Show spinner and progress bar container after submit.
             document.getElementById("spinnerContainer").style.display = "block";
             document.getElementById("progressContainer").style.display = "block";
+            document.getElementById("stopButton").style.display = "block";
+
             var formData = new FormData(this);
             fetch('/process', {
                 method: 'POST',
@@ -149,6 +228,11 @@
                 if (data.error) {
                     throw new Error(data.error);
                 }
+                // Update channel info immediately after successful submission
+                document.getElementById("processingChannelName").innerText = 
+                    `Processing channel: ${data.channel_name}`;
+                document.getElementById("videoCountInfo").innerText = 
+                    `Total videos to process: ${data.total_videos}`;
                 console.log(data);
                 checkProgress();
             })
@@ -165,38 +249,93 @@
         });
 
         // Poll the /progress endpoint every second.
+        let startTime = null;
+        let lastProgress = 0;
+        let progressInterval;
+
+        function formatTimeRemaining(seconds) {
+            if (seconds < 60) return `${Math.round(seconds)}s remaining`;
+            if (seconds < 3600) {
+                const minutes = Math.floor(seconds / 60);
+                const secs = Math.round(seconds % 60);
+                return `${minutes}m ${secs}s remaining`;
+            }
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours}h ${minutes}m remaining`;
+        }
+
         function checkProgress() {
+            if (!startTime) startTime = Date.now();
+
             fetch('/progress')
-                .then(response => {
-                    if (!response.ok) {
-                        return response.json().then(err => {
-                            throw new Error(err.error || 'Server error occurred');
-                        });
-                    }
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
+                    if (data.error) throw new Error(data.error);
+                    
                     let percent = data.progress;
-                    document.getElementById('progressBar').style.width = percent + '%';
-                    document.getElementById('progressText').innerText = percent + '% complete';
+                    document.getElementById('progressBar').style.width = `${percent}%`;
+                    document.getElementById('progressPercent').innerText = `${percent}%`;
+                    
+                    // Format time with consistent 2 decimal places
+                    const timeDisplay = Number(data.process_time).toFixed(2);
+                    document.getElementById('processTime').innerText = timeDisplay;
+                    
+                    // Update counters
+                    document.getElementById('transcriptsCount').innerText = data.transcripts_count;
+                    document.getElementById('noTranscriptsCount').innerText = data.no_transcripts_count;
+                    
+                    // Update video count info
+                    const processedVideos = data.transcripts_count + data.no_transcripts_count;
+                    document.getElementById("videoCountInfo").innerText = 
+                        `Processing ${processedVideos} out of ${data.total_videos} videos`;
+
+                    if (percent === -1) {
+                        document.getElementById('progressContainer').style.display = 'none';
+                        document.getElementById('spinnerContainer').style.display = 'none';
+                        document.getElementById('stoppedContainer').style.display = 'block';
+                        document.getElementById('stoppedStats').innerHTML = 
+                            `Videos processed: ${processedVideos} out of ${data.total_videos}<br>` +
+                            `Time elapsed: ${timeDisplay} seconds`;
+                        return;
+                    }
+
+                    // Calculate time remaining
+                    if (percent > lastProgress && percent < 100) {
+                        const elapsedTime = (Date.now() - startTime) / 1000;
+                        const progressDelta = percent - lastProgress;
+                        const timePerPercent = elapsedTime / percent;
+                        const remainingPercent = 100 - percent;
+                        const estimatedTimeRemaining = timePerPercent * remainingPercent;
+                        
+                        document.getElementById('timeRemaining').innerText = 
+                            formatTimeRemaining(estimatedTimeRemaining);
+                        
+                        document.getElementById('progressText').innerText = 
+                            `Processed ${percent}% (${data.transcripts_count || 0} videos)`;
+                    }
+                    
+                    lastProgress = percent;
+
                     if (percent < 100) {
-                        setTimeout(checkProgress, 1000);
+                        setTimeout(checkProgress, 10); // Check every 10ms instead of 1000ms
                     } else {
-                        // Once complete, hide the spinner.
+                        // Process complete
+                        document.getElementById("stopButton").style.display = "none";
                         document.getElementById("spinnerContainer").style.display = "none";
-                        // Display summary information.
+                        document.getElementById('timeRemaining').innerText = 'Complete!';
+                        document.getElementById('progressText').innerText = 
+                            `Processed ${data.transcripts_count} videos`;
+                        
+                        // Display final summary
                         if(data.channel_name) {
                             document.getElementById("channelName").innerText = "Channel: " + data.channel_name;
                         }
                         let summaryText = "Transcripts extracted: " + data.transcripts_count +
-                                          "\nVideos without transcripts: " + data.no_transcripts_count +
-                                          "\nProcessing time: " + data.process_time.toFixed(2) + " seconds";
+                                        "\nVideos without transcripts: " + data.no_transcripts_count +
+                                        "\nProcessing time: " + timeDisplay + " seconds";
                         document.getElementById("summaryText").innerText = summaryText;
                         document.getElementById("summaryContainer").style.display = "block";
-                        // Show the download button.
                         document.getElementById("downloadContainer").style.display = "block";
                     }
                 })
@@ -210,6 +349,20 @@
                     errorContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 });
         }
+
+        function stopProcess() {
+            fetch('/stop_process', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Process stop requested:', data);
+            })
+            .catch(error => console.error('Error stopping process:', error));
+        }
+
+        // Add event listeners
+        document.getElementById('stopButton').addEventListener('click', stopProcess);
     </script>
 </body>
 </html>
