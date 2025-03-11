@@ -20,6 +20,9 @@
               padding: 1rem;
           }
       }
+      html {
+          scroll-behavior: smooth;
+      }
     </style>
 </head>
 <body>
@@ -151,10 +154,13 @@
             })
             .catch(error => {
                 // Display error message and hide spinner and progress bar
-                document.getElementById("errorContainer").innerText = error.message || "An unexpected error occurred";
-                document.getElementById("errorContainer").style.display = "block";
+                const errorContainer = document.getElementById("errorContainer");
+                errorContainer.innerText = error.message || "An unexpected error occurred";
+                errorContainer.style.display = "block";
                 document.getElementById("spinnerContainer").style.display = "none";
                 document.getElementById("progressContainer").style.display = "none";
+                // Scroll to the error message
+                errorContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
             });
         });
 
@@ -195,13 +201,15 @@
                     }
                 })
                 .catch(error => {
-                    document.getElementById("errorContainer").innerText = error.message || "An error occurred while checking progress";
-                    document.getElementById("errorContainer").style.display = "block";
+                    const errorContainer = document.getElementById("errorContainer");
+                    errorContainer.innerText = error.message || "An error occurred while checking progress";
+                    errorContainer.style.display = "block";
                     document.getElementById("spinnerContainer").style.display = "none";
                     document.getElementById("progressContainer").style.display = "none";
+                    // Scroll to the error message
+                    errorContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 });
         }
     </script>
 </body>
 </html>
-
