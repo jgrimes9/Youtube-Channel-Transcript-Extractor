@@ -33,35 +33,45 @@
         <form id="channelForm" action="/process" method="post">
             <div class="form-group">
                 <label for="channelId">YouTube Channel ID:</label>
-                <!-- Brief description on how to get the Channel ID -->
-                <div class="alert alert-info" role="alert">
-                    <strong>How to get the Channel ID:</strong>
-                    <br>
-                    Right-click on the channel's page and choose "View Page Source" (or press Ctrl+U).
-                    Then, use Ctrl+F to search for <code>"channelId"</code> or <code>"data-channel-external-id"</code>.
-                    The Channel ID will typically start with <code>UC</code>.
+                <p>
+                    <button class="btn btn-info btn-sm" type="button" data-toggle="collapse" data-target="#channelIdHelp" aria-expanded="false">
+                        How to get the Channel ID?
+                    </button>
+                </p>
+                <div class="collapse" id="channelIdHelp">
+                    <div class="alert alert-info" role="alert">
+                        Right-click on the channel's page and choose "View Page Source" (or press Ctrl+U).
+                        Then, use Ctrl+F to search for <code>"channelId"</code> or <code>"data-channel-external-id"</code>.
+                        The Channel ID will typically start with <code>UC</code>.
+                    </div>
                 </div>
                 <input type="text" class="form-control" id="channelId" name="channelId" placeholder="UCXXXXXXXXXXXXXXX" required>
             </div>
             <div class="form-group">
                 <label for="apiKey">Your YouTube Data API v3 API Key:</label>
-                <!-- Explanation on how to get the API key -->
-                <div class="alert alert-info" role="alert">
-                    <strong>How to get your YouTube Data API v3 API Key:</strong>
-                    <br>
-                    1. Go to the <a href="https://console.developers.google.com/" target="_blank">Google Developers Console</a>.
-                    <br>
-                    2. Create a new project or select an existing project.
-                    <br>
-                    3. Navigate to the "Library" tab and search for "YouTube Data API v3".
-                    <br>
-                    4. Click on "Enable" to enable the API for your project.
-                    <br>
-                    5. Go to the "Credentials" tab and click on "Create Credentials".
-                    <br>
-                    6. Select "API key" from the dropdown menu. Your API key will be generated.
-                    <br>
-                    7. Copy the API key and paste it in the box below.
+                <p>
+                    <button class="btn btn-info btn-sm" type="button" data-toggle="collapse" data-target="#apiKeyHelp" aria-expanded="false">
+                        How to get your API Key?
+                    </button>
+                </p>
+                <div class="collapse" id="apiKeyHelp">
+                    <div class="alert alert-info" role="alert">
+                        <strong>How to get your YouTube Data API v3 API Key:</strong>
+                        <br>
+                        1. Go to the <a href="https://console.developers.google.com/" target="_blank">Google Developers Console</a>.
+                        <br>
+                        2. Create a new project or select an existing project.
+                        <br>
+                        3. Navigate to the "Library" tab and search for "YouTube Data API v3".
+                        <br>
+                        4. Click on "Enable" to enable the API for your project.
+                        <br>
+                        5. Go to the "Credentials" tab and click on "Create Credentials".
+                        <br>
+                        6. Select "API key" from the dropdown menu. Your API key will be generated.
+                        <br>
+                        7. Copy the API key and paste it in the box below.
+                    </div>
                 </div>
                 <input type="text" class="form-control" id="apiKey" name="apiKey" placeholder="Enter your API key" required>
             </div>
@@ -108,7 +118,8 @@
     </div>
 
     <!-- jQuery and Bootstrap JS -->
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // When the form is submitted:
         document.getElementById("channelForm").addEventListener("submit", function(e) {
@@ -193,3 +204,4 @@
     </script>
 </body>
 </html>
+
