@@ -72,6 +72,9 @@
             <button type="submit" class="btn btn-primary">Submit</button>
         </form>
 
+        <!-- Error Message Container (hidden by default) -->
+        <div id="errorContainer" class="alert alert-danger mt-4" style="display: none;"></div>
+
         <!-- Spinner (hidden by default) -->
         <div id="spinnerContainer" class="text-center mt-4" style="display: none;">
             <div class="spinner-border text-primary" role="status">
@@ -110,6 +113,8 @@
         // When the form is submitted:
         document.getElementById("channelForm").addEventListener("submit", function(e) {
             e.preventDefault();
+            // Hide previous error message, if any.
+            document.getElementById("errorContainer").style.display = "none";
             // Show spinner and progress bar container after submit.
             document.getElementById("spinnerContainer").style.display = "block";
             document.getElementById("progressContainer").style.display = "block";
@@ -118,18 +123,45 @@
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => {
+                        throw new Error(err.error || 'Server error occurred');
+                    });
+                }
+                return response.json();
+            })
             .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
                 console.log(data);
                 checkProgress();
+            })
+            .catch(error => {
+                // Display error message and hide spinner and progress bar
+                document.getElementById("errorContainer").innerText = error.message || "An unexpected error occurred";
+                document.getElementById("errorContainer").style.display = "block";
+                document.getElementById("spinnerContainer").style.display = "none";
+                document.getElementById("progressContainer").style.display = "none";
             });
         });
 
         // Poll the /progress endpoint every second.
         function checkProgress() {
             fetch('/progress')
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => {
+                            throw new Error(err.error || 'Server error occurred');
+                        });
+                    }
+                    return response.json();
+                })
                 .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
                     let percent = data.progress;
                     document.getElementById('progressBar').style.width = percent + '%';
                     document.getElementById('progressText').innerText = percent + '% complete';
@@ -150,6 +182,12 @@
                         // Show the download button.
                         document.getElementById("downloadContainer").style.display = "block";
                     }
+                })
+                .catch(error => {
+                    document.getElementById("errorContainer").innerText = error.message || "An error occurred while checking progress";
+                    document.getElementById("errorContainer").style.display = "block";
+                    document.getElementById("spinnerContainer").style.display = "none";
+                    document.getElementById("progressContainer").style.display = "none";
                 });
         }
     </script>
