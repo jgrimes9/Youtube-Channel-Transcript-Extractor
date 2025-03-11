@@ -304,16 +304,39 @@ def process_channel():
     logging.info("Download folder name set to: %s", download_folder_name)
     logging.info("User API key received.")
     progress = 0  # Reset progress before starting.
+    errors = []
     
     if TEST_MODE:
         client = None  # Dummy mode; client not used.
     else:
+        # Try to build the client and test the API key.
         try:
             client = build('youtube', 'v3', developerKey=user_api_key)
+            test_response = client.search().list(
+                part='snippet',
+                q='test',
+                maxResults=1
+            ).execute()
         except Exception as e:
-            logging.error("Error building YouTube client: %s", e)
-            return jsonify({"error": "Invalid API key or error initializing YouTube client."}), 400
-
+            logging.error("Invalid API key: %s", e)
+            errors.append("Invalid API key.")
+        
+        # Try to validate the channel ID.
+        try:
+            # Only attempt channel lookup if client is built
+            channel_response = client.channels().list(
+                part='snippet', 
+                id=channel_id
+            ).execute() if client else {}
+            if not channel_response.get('items'):
+                errors.append("Invalid channel ID.")
+        except Exception as e:
+            logging.error("Error validating channel ID: %s", e)
+            errors.append("Invalid channel ID.")
+    
+    if errors:
+        return jsonify({"error": " ".join(errors)}), 400
+    
     thread = threading.Thread(target=process_videos, args=(client, channel_id))
     thread.start()
     return jsonify({"message": "Channel processing started!"})
@@ -333,6 +356,14 @@ def download_all():
     zip_buffer = create_zip_archive(download_folder_name)
     zip_filename = f"{download_folder_name}.zip"
     return send_file(zip_buffer, as_attachment=True, download_name=zip_filename, mimetype="application/zip")
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    # Log the exception and return JSON response with error message
+    import traceback
+    error_message = ''.join(traceback.format_exception_only(type(e), e)).strip()
+    logging.error("Unhandled Exception: %s", error_message)
+    return jsonify({"error": error_message}), 500
 
 if __name__ == '__main__':
     # Read PORT from the environment, default to 5000 if not set.
