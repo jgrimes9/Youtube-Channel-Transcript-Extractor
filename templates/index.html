@@ -211,6 +211,12 @@
             document.getElementById("progressContainer").style.display = "block";
             document.getElementById("stopButton").style.display = "block";
 
+            // Add smooth scrolling to progress section
+            document.getElementById("progressContainer").scrollIntoView({ 
+                behavior: 'smooth',
+                block: 'start'
+            });
+
             var formData = new FormData(this);
             fetch('/process', {
                 method: 'POST',
@@ -366,3 +372,4 @@
     </script>
 </body>
 </html>
+
